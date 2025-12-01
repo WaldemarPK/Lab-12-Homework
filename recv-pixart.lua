@@ -1,9 +1,17 @@
-local url = "https://cedar.fogcloud.org/api/logs/58F4"
+-- URL that has the 64 block names in the same order as your scan
+local url = "https://cedar.fogcloud.org/api/logs/CB6F"  -- use the same ID you post to
+
+
+-- Refuel from slot 1
 
 local function refuel()
     turtle.select(1)
     turtle.refuel(64)
 end
+
+
+-- Find the slot that holds a given block name
+-- You must have the exact blocks in slots 2–16
 
 local function findSlotForBlock(blockName)
     for slot = 2, 16 do
@@ -15,21 +23,27 @@ local function findSlotForBlock(blockName)
     return nil
 end
 
--- FIXED: No extra forward on last pixel
+
+-- Place the given block under the turtle
+
+local function placeBlock(blockName)
+    local slot = findSlotForBlock(blockName)
+    if not slot then
+        print("ERROR: Turtle does not have block:", blockName)
+        return false
+    end
+    turtle.select(slot)
+    turtle.placeDown()
+    return true
+end
+
+
 local function drawLine(blocks)
     for i = 1, #blocks do
-        local block = blocks[i]
-        local slot = findSlotForBlock(block)
-
-        if not slot then
-            print("ERROR: Missing block:", block)
+        if not placeBlock(blocks[i]) then
             return false
         end
-
-        turtle.select(slot)
-        turtle.placeDown()
-
-        -- Only move forward if NOT at end of row
+        -- Only move forward if not at the last column
         if i < #blocks then
             turtle.forward()
         end
@@ -37,42 +51,18 @@ local function drawLine(blocks)
     return true
 end
 
-local function drawImage(rows)
-    for row = 1, 8 do
-        local line = rows[row]
-
-        if row % 2 == 0 then
-            local rev = {}
-            for i = 8, 1, -1 do rev[#rev+1] = line[i] end
-            line = rev
-        end
-
-        drawLine(line)
-
-        -- Now the turtle is standing on the final block in the row.
-        -- Move to next row if not finished.
-        if row < 8 then
-            if row % 2 == 1 then
-                turtle.turnRight()
-                turtle.forward()
-                turtle.turnRight()
-            else
-                turtle.turnLeft()
-                turtle.forward()
-                turtle.turnLeft()
-            end
-        end
-    end
-end
-
+-------------------------------------------------------
+-- MAIN
+-------------------------------------------------------
 refuel()
 
 local req = http.get(url)
 if not req then
-    print("Failed to connect.")
+    print("Failed to connect to URL!")
     return
 end
 
+-- Read all lines from the server
 local pixels = {}
 while true do
     local line = req.readLine()
@@ -82,10 +72,11 @@ end
 req.close()
 
 if #pixels < 64 then
-    print("Expected 64 lines, got", #pixels)
+    print("ERROR: Expected 64 lines, got " .. #pixels)
     return
 end
 
+-- Group pixels into 8 rows of 8, in EXACT order from the file
 local rows = {}
 for row = 1, 8 do
     rows[row] = {}
@@ -95,6 +86,22 @@ for row = 1, 8 do
     end
 end
 
-drawImage(rows)
-print("8×8 complete!")
+for row = 1, 8 do
+    local line = rows[row]
 
+    drawLine(line)
+
+    if row < 8 then
+        if row % 2 == 1 then
+            -- After a left→right row: we are on the right side
+            turtle.turnRight()
+            turtle.forward()
+            turtle.turnRight()
+        else
+            -- After a right→left row: we are on the left side
+            turtle.turnLeft()
+            turtle.forward()
+            turtle.turnLeft()
+        end
+    end
+end
